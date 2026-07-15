@@ -1455,7 +1455,7 @@ def validate_message(message: str):
 
 
 # wait until at least on js client is online.
-def wait_for_connected_jsclient(interval: float = 0.3, max_attempts: int = 6):
+def wait_for_connected_jsclient(interval: float = 0.5, max_attempts: int = 20):
     """ wait until a connection to the browser can be made.
 
     Args:
