@@ -809,14 +809,17 @@ def edit_in_neovim(filename: str = ""):
     if not os.path.exists(path):
         return
     sock = ARGS.nvim_address.strip()
-    if not ":" in sock:  # unix socket
+    if ":" not in sock:  # unix socket
         dirname = os.path.dirname(sock)
         if not os.path.exists(dirname):
             os.makedirs(dirname)
-    if socket_in_use(sock):
-        subprocess.Popen(["nvr", "-s", "--nostart", "--servername", sock, path])
-    else:
-        subprocess.Popen([ARGS.terminal, "-e", "nvr", "-s", "--servername", sock, path])
+    try:
+        if socket_in_use(sock):
+            subprocess.Popen(["nvr", "-s", "--nostart", "--servername", sock, path])
+        else:
+            subprocess.Popen([ARGS.terminal, "-e", "nvr", "-s", "--servername", sock, path])
+    except OSError as e:
+        print(e)
 
 
 # convert a jupyter notebook to html
