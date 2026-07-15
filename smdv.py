@@ -52,10 +52,8 @@ ARGS = ""  # the smdv command line arguments
 SMDV_DEFAULT_ARGS = os.environ.get("SMDV_DEFAULT_ARGS", "")  # default smdv arguments
 JSCLIENTS = set()  # jsclients wait for an update from the pyclient
 PYCLIENTS = set()  # pyclients update the html body of the jsclient
-WEBSOCKETS_SERVER = None  # websockets server
 BACKMESSAGES = collections.deque()  # for communication between js and py
 FORWARDMESSAGES = collections.deque()  # for communication between js and py
-EVENT_LOOP = asyncio.get_event_loop()
 
 MESSAGE = {}
 
@@ -431,7 +429,7 @@ async def ask_num_js_clients():
 
 
 # handle a message sent by one of the clients:
-async def handle_message(client: websockets.WebSocketServerProtocol, message: str):
+async def handle_message(client: websockets.ServerConnection, message: str):
     """ handle a message sent by one of the clients
 
     Args:
@@ -487,7 +485,7 @@ async def handle_message(client: websockets.WebSocketServerProtocol, message: st
 
 
 # register websocket client
-async def register_client(client: websockets.WebSocketServerProtocol):
+async def register_client(client: websockets.ServerConnection):
     """ register a client
 
     This function registers a client (websocket) in either the set of
@@ -528,12 +526,11 @@ async def send_as_pyclient_async(message: dict):
 
 
 # serve clients
-async def serve_client(client: websockets.WebSocketServerProtocol, path: str):
+async def serve_client(client: websockets.ServerConnection):
     """ asynchronous websocket server to serve a websocket client
 
     Args:
         client: the client (websocket) to serve.
-        path: the path over which to serve
 
     """
     await register_client(client)
@@ -571,11 +568,14 @@ async def send_message_to_all_js_clients():
         if len(BACKMESSAGES) > 20:
             BACKMESSAGES.pop()
     if JSCLIENTS:
-        await asyncio.wait([client.send(json.dumps(MESSAGE)) for client in JSCLIENTS])
+        await asyncio.wait(
+            asyncio.create_task(client.send(json.dumps(MESSAGE)))
+            for client in JSCLIENTS
+        )
 
 
 # unregister websocket client
-async def unregister_client(client: websockets.WebSocketServerProtocol):
+async def unregister_client(client: websockets.ServerConnection):
     """ unregister a client
 
     Args:
@@ -894,7 +894,7 @@ def kill_websocket_server() -> int:
 # ask the number of
 def number_of_connected_jsclients():
     """ ask the websocket server for the number of connected js clients """
-    return EVENT_LOOP.run_until_complete(ask_num_js_clients())
+    return asyncio.run(ask_num_js_clients())
 
 
 # main smdv program
@@ -1303,12 +1303,13 @@ def run_server_in_subprocess(server="flask"):
 # websocket server
 def run_websocket_server():
     """ start and run the websocket server """
-    global WEBSOCKETS_SERVER
-    WEBSOCKETS_SERVER = websockets.serve(
-        serve_client, ARGS.websocket_host, ARGS.websocket_port
-    )
-    EVENT_LOOP.run_until_complete(WEBSOCKETS_SERVER)
-    EVENT_LOOP.run_forever()
+    async def serve_forever():
+        async with websockets.serve(
+            serve_client, ARGS.websocket_host, ARGS.websocket_port
+        ) as server:
+            await server.serve_forever()
+
+    asyncio.run(serve_forever())
 
 
 # send a message to the websocket server at the python client
@@ -1319,7 +1320,7 @@ def send_as_pyclient(message: dict):
         message: the message to send (in dictionary format)
     """
     try:
-        EVENT_LOOP.run_until_complete(send_as_pyclient_async(message))
+        asyncio.run(send_as_pyclient_async(message))
     except RuntimeError:
         pass  # allows messages to be lost when sending many messages at once.
 
