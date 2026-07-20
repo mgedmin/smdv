@@ -951,6 +951,13 @@ def main() -> int:
         # wait for the websocket server to be fully started:
         wait_for_server(server="websocket", status="running")
 
+        # be sure to read stdin before opening the browser, in case the
+        # subprocess decides to read from our stdin pipe
+        if not os.isatty(0):
+            stdin_content = sys.stdin.read()
+        else:
+            stdin_content = None
+
         # if no browser connection can be found: open browser
         if not ARGS.no_browser and number_of_connected_jsclients() == 0:
             open_browser()
@@ -969,8 +976,8 @@ def main() -> int:
             return 0
 
         # else, check if something was piped into smdv and update the body accordingly:
-        if not os.isatty(0):
-            send_message_from_stdin()
+        if stdin_content is not None:
+            send_message_from_stdin(stdin_content)
             return 0
 
         # only happens when no arguments are supplied, nor anything was piped into smdv:
@@ -1345,9 +1352,8 @@ def send_delete_request_to_server():
 
 
 # update body of smdv from stdin
-def send_message_from_stdin():
+def send_message_from_stdin(content):
     """ read content from stdin and place it in the html body """
-    content = sys.stdin.read()
     try:
         message = json.loads(content)
     except json.decoder.JSONDecodeError:
