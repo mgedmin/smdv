@@ -29,7 +29,9 @@ import re
 import sys
 import json
 import time
+import signal
 import socket
+import typing
 import asyncio
 import argparse
 import warnings
@@ -634,19 +636,11 @@ def create_app() -> flask.Flask:
     app = flask.Flask(__name__, static_folder=ARGS.home, static_url_path="/@static")
 
     # stop the flask server
-    def stop_flask_server() -> int:
-        """ stop the flask server
-
-        Returns:
-            exit_status: exit status of the request (0: success, 1: failure)
-
-        """
-        func = flask.request.environ.get("werkzeug.server.shutdown")
-        try:
-            func()
-            return 0
-        except Exception as e:
-            return 1
+    def stop_flask_server() -> typing.NoReturn:
+        """ stop the flask server """
+        os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(1)
+        os.kill(os.getpid(), signal.SIGKILL)
 
     # index route for the smdv app
     @app.route("/", methods=["GET", "PUT", "DELETE"])
@@ -727,8 +721,9 @@ def create_app() -> flask.Flask:
             return ""
 
         if flask.request.method == "DELETE":
-            exit_status = stop_flask_server()
-            return "failed.\n" if exit_status else "success.\n"
+            response = flask.make_response("success.\n")
+            response.call_on_close(stop_flask_server)
+            return response
 
         # should never get here:
         return "failed.\n"
